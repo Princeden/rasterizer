@@ -2,6 +2,7 @@ import os
 import json
 import numpy as np
 from PIL import Image
+import sys 
 vertices = []
 faces = []
 textures = []
@@ -67,7 +68,13 @@ def edge_function(a, b, c):
 
 
 def main():
-    load_obj('cow.obj')
+    if len(sys.argv) < 2:
+        print("Usage: python main.py <path_to_obj_file>")
+        return
+    try:
+        load_obj(sys.argv[1])
+    except Exception as e:
+        return
     print("Object Loaded with vertices: ", len(vertices))
     world_to_camera = np.array([0.707107, -0.331295, 0.624695, 0, 0, 0.883452, 0.468521, 0, -0.707107, -0.331295, 0.624695, 0, -1.63871, -5.747777, -40.400412, 1])
     world_to_camera = world_to_camera.reshape((4, 4))
