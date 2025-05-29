@@ -1,19 +1,31 @@
 import os 
-import json
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageChops
 import sys 
+import math
 vertices = []
 faces = []
 textures = []
-FOV = 90
+FOV = 45
 NEAR = 0.1
 FAR = 100
 IMAGE_WIDTH = 512
 IMAGE_HEIGHT = 512
-buffer = np.zeros((IMAGE_HEIGHT, IMAGE_WIDTH, 3), dtype=np.uint8)
+buffer = np.full((IMAGE_HEIGHT, IMAGE_WIDTH), 255).astype(np.uint8)
 depth_buffer = np.full((IMAGE_HEIGHT, IMAGE_WIDTH), np.inf)
 # projection matrix that scales based on the field of view and aspect ratio
+
+def rotation_x_matrix(theta):
+    c = math.cos(theta)
+    s = math.sin(theta)
+    return [
+        [1,0,0,0],
+        [0,c,-s,0],
+        [0,s,c,0],
+        [0,0,0,1]
+    ]
+
+
 def create_projection_matrix(fov, aspect_ratio, near, far):
     scale = 1.0 / np.tan(np.radians(fov) / 2)
     projection_matrix = np.zeros((4, 4))
@@ -77,11 +89,12 @@ def main():
         return
     print("Object Loaded with vertices: ", len(vertices))
     world_to_camera = np.array([0.707107, -0.331295, 0.624695, 0, 0, 0.883452, 0.468521, 0, -0.707107, -0.331295, 0.624695, 0, -1.63871, -5.747777, -40.400412, 1])
-    world_to_camera = world_to_camera.reshape((4, 4))
+    world_to_camera = np.matmul(world_to_camera.reshape((4, 4)), rotation_x_matrix(60))
     projection = create_projection_matrix(FOV, 1.0, NEAR, FAR)
     for face in faces:
+        cameraVertices = [np.array(vertices[vertex]) for vertex in face]
         triangle =[camera_to_raster(vertices[vertex], world_to_camera, projection) for vertex in face]
-        print("Triangle: ", triangle)
+        # print("Triangle: ", triangle)
 
             
             # buffer[int(vertex[1]), int(vertex[0])] = [255, 255, 255]
@@ -92,7 +105,7 @@ def main():
         # if min_x > IMAGE_WIDTH or max_x <0 or min_y > IMAGE_HEIGHT -1 or max_y < 0:
         #     print("Triangle is out of bounds")
         #     continue
-        print("Triangle Transformed: ", triangle)
+        # print("Triangle Transformed: ", triangle)
         x0 = max(0, min_x)
         x1 = min(IMAGE_WIDTH - 1, max_x)
         y0 = max(0, min_y)
@@ -104,22 +117,31 @@ def main():
                 w0 = edge_function(triangle[1], triangle[2], p)
                 w1 = edge_function(triangle[2], triangle[0], p)
                 w2 = edge_function(triangle[0], triangle[1], p)
-                print("W0: ", w0)
-                print("W1: ", w1)
-                print("W2: ", w2)
+                # print("W0: ", w0)
+                # print("W1: ", w1)
+                # print("W2: ", w2)
                 if (w0 >= 0 and w1 >= 0 and w2 >= 0) or (w0 <= 0 and w1 <= 0 and w2 <= 0):
                     w0 /= area
                     w1 /= area
                     w2 /= area
                     z = 1 / (w0 * triangle[0][2] + w1 * triangle[1][2] + w2 * triangle[2][2])
+                    px = (cameraVertices[0][0]/-cameraVertices[0][2]) * w0 + (cameraVertices[1][0]/-cameraVertices[1][2]) * w1 + (cameraVertices[2][0]/-cameraVertices[2][2]) * w2  
+                    py = (cameraVertices[0][1]/-cameraVertices[0][2]) * w0 + (cameraVertices[1][1]/-cameraVertices[1][2]) * w1 + (cameraVertices[2][1]/-cameraVertices[2][2]) * w2  
+                    viewDirection = np.array([px * z, py * z, -z])
+                    viewDirection = -1 * viewDirection.reshape((3,1))
+                    viewDirection = viewDirection / np.linalg.norm(viewDirection)
+                    n = np.cross(cameraVertices[1] - cameraVertices[0], cameraVertices[2] - cameraVertices[0])
+                    shadeFactor = np.dot(n, viewDirection)
+                    shadeFactor = max(0, shadeFactor)
+                    print(shadeFactor)
                     # print("Z: ", z)
                     # print("Depth Buffer: ", depth_buffer[j, i])
                     if z < depth_buffer[j, i]:
-                        print("Updating Depth Buffer")
-                        print("J: ", j)
-                        print("I: ", i)
+                        # print("Updating Depth Buffer")
+                        # print("J: ", j)
+                        # print("I: ", i)
                         depth_buffer[j, i] = z
-                        buffer[j, i] = [255, 255, 255]
+                        buffer[j, i] = shadeFactor * 255
     image = Image.fromarray(buffer)
     image.show()
 
